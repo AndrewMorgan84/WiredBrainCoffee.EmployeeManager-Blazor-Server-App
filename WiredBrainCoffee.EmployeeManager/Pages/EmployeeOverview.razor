@@ -1,5 +1,6 @@
-﻿@page "/employees/list"
+﻿@page "/employees/list/{currentPage:int?}"
 @inject IDbContextFactory<EmployeeManagerDbContext> ContextFactory
+@inject NavigationManager NavigationManager
 
 <PageTitle>Employees</PageTitle>
 
@@ -11,6 +12,21 @@
 }
 else
 {
+    <ul class="pagination mt-3">
+        <li class="page-item @(CurrentPage == 1 ? "disabled":"")">
+            <a class="page-link" href="/employees/list/@(CurrentPage - 1)"><i class="oi oi-caret-left"/></a>
+        </li>
+        @for (int i = 1; i <= TotalPages; i++)
+        {
+            <li class="page-item @(CurrentPage == i ? "active":"")">
+                <a class="page-link" href="/employees/list/@i">@i</a>
+            </li>
+        }
+        <li class="page-item @(CurrentPage == TotalPages ? "disabled":"")">
+            <a class="page-link" href="/employees/list/@(CurrentPage + 1)"><i class="oi oi-caret-right" /></a>
+        </li>
+    </ul>
+
     <table class="table table-striped">
         <thead>
             <tr>
@@ -35,13 +51,42 @@ else
 }
 
 @code {
+
+    [Parameter]
+    public int? CurrentPage { get; set; }
+
     private Employee[]? Employees { get; set; }
 
-    protected override async Task OnInitializedAsync()
+    private int TotalPages { get; set; }
+
+    private const int itemsPerPage = 4;
+
+    protected override async Task OnParametersSetAsync()
     {
+        if (CurrentPage is null or < 1)
+        {
+            NavigationManager.NavigateTo("/employees/list/1");
+            return;
+        }
+
         using var context = ContextFactory.CreateDbContext();
+
+        var employeeCount = await context.Employees.CountAsync();
+        TotalPages = employeeCount == 0 ? 1 : (int)Math.Ceiling((double)employeeCount / itemsPerPage);
+
+        if (CurrentPage > TotalPages)
+        {
+            NavigationManager.NavigateTo($"employees/list/{TotalPages}");
+            return;
+        }
+
+        var itemsToSkip = (CurrentPage.Value - 1) * itemsPerPage;
+
         Employees = await context.Employees
         .Include(emp => emp.Department)
+        .OrderBy(emp => emp.FirstName)
+        .Skip(itemsToSkip)
+        .Take(itemsPerPage)
         .ToArrayAsync();
     }
 }
